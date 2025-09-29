@@ -11,17 +11,9 @@
 
 namespace CFFI;
 
-use ReflectionClass;
-use CFFI\CType\CArray;
-use CFFI\CType\Pointer;
 use CFFI\CType\Unsigned;
 use CFFI\CType\Signed;
 use CFFI\CType\Callback;
-use ReflectionProperty;
-use ReflectionParameter;
-use ReflectionNamedType;
-use ReflectionIntersectionType;
-
 abstract class Type extends FFI
 {
     private $cobj;
@@ -71,101 +63,14 @@ abstract class Type extends FFI
         return self::NAME . " $signed $baseType $cname;";
     }
 
-    public static function nameType2CName(ReflectionNamedType $type, &$typeClass): string
-    {
-        $typeClass = $type->getName();
-        if ($typeClass instanceof Type) {
-            return $typeClass::getCName();
-        }
-        return '';
-    }
-
-    public static function parseReflectionTypeModifier($types, &$cname, &$signed, &$pointer)
-    {
-        $signed = $pointer = $typeClass = '';
-        if ($types instanceof \ReflectionNamedType) {
-            $cname = self::nameType2CName($types, $typeClass);
-        } else if ($types instanceof \ReflectionIntersectionType) {
-            $cname = '';
-            foreach ($types as $t) {
-                $tCName = self::nameType2CName($t, $typeClass);
-                if ($tCName) {
-                    $cname = $tCName;
-                } else if ($typeClass == Unsigned::class) {
-                    $signed = Unsigned::NAME;
-                } else if ($typeClass == Signed::class) {
-                    $signed = Signed::NAME;
-                } else if ($typeClass instanceof Pointer) {
-                    $pointer = $typeClass::NAME;
-                }
-            }
-        }
-    }
-
-    public static function getFucntionTypedef($cname): string
+    public static function getFucntionTypedef(string $cname): string
     {
         $refMethod = new \ReflectionMethod(static::class, '__invoke');
-        $retType = $refMethod->getReturnType();
-
-        $cname = $signed = $pointer = '';
-        self::parseReflectionTypeModifier($retType, $cname, $signed, $pointer);
-        if (!$cname) {
-            throw new \TypeError('must have return type');
-        }
-        $retTypeName = "$signed $cname $pointer";
-
-        $params = $refMethod->getParameters();
-        $paramsType = '';
-        foreach ($params as $refParam) {
-            if (!$refParam->hasType()) {
-                throw new \TypeError('function parmaters must have type');
-            }
-            if ($refParam->isVariadic()) {
-                $paramsType .= '...';
-            } else {
-                $paramsType .= self::getTypeStatement($refParam) . ',';
-            }
-        }
-        $paramsType = rtrim($paramsType, ',');
-
+        $retTypeName = '';
+        $paramsType = self::parseFucntionModifier($refMethod, $retTypeName);
         return self::NAME . " $retTypeName (*$cname)($paramsType)";
     }
 
-    public static function getTypeStatement(ReflectionProperty|ReflectionParameter $scope = null): string
-    {
-        $variableName = $scope->name;
-        $type = $scope->getType();
-        $cname = $signed = $pointer = $carray = '';
-        self::parseReflectionTypeModifier($type, $cname, $signed, $pointer);
-        if (!$cname) {
-            return '';
-        }
-
-        while ($level = $scope->getAttributes(Pointer::class)) {
-            if (!($level = $level[0]->getArguments())) {
-                $pointer = Pointer::NAME;
-                break;
-            }
-            if ($level[0] > 0) {
-                $pointer = str_repeat(Pointer::NAME, $level[0]);
-                break;
-            } else {
-                throw new \TypeError('Pointer level must greater than 0');
-            }
-        }
-        while ($size = $scope->getAttributes(CArray::class)) {
-            if (!($size = $size[0]->getArguments())) {
-                throw new \TypeError('C array must have size');
-            }
-            if ($size[0] > 0) {
-                $carray = "[{$size[0]}]";
-                break;
-            } else {
-                throw new \TypeError('C array size must greater than 0');
-            }
-        }
-        return "$signed $cname $pointer $variableName $carray";
-    }
 
     /**
      * get C type name from Class::NAME
@@ -211,13 +116,5 @@ abstract class Type extends FFI
             $v = $v[0];
         } while (is_array($v));
         return $dim;
-    }
-
-
-    public static function getCallbackDef(?ReflectionClass $refl = null, &$requireType = [])
-    {
-        $refl = self::reflectionClass($refl);
-        $method = $refl->getMethod($refl->getShortName());
-        return  self::parseFunction($method, true, $requireType);
     }
 }

@@ -12,14 +12,7 @@ namespace CFFI;
 
 use ReflectionClass;
 use ReflectionProperty;
-use ReflectionUnionType;
-use ReflectionIntersectionType;
-use ReflectionNamedType;
 use CFFI\Type;
-use CFFI\CType\CArray;
-use CFFI\CType\Pointer;
-use CFFI\CType\Unsigned;
-use CFFI\CType\Signed;
 
 class Struct extends Type
 {
@@ -37,9 +30,9 @@ class Struct extends Type
     public static function getTypedef(): string
     {
         $cname = self::getCName();
-        $typedef = parent::NAME . self::SPACE . self::NAME . " _$cname {";
+        $typedef = self::NAME . " _$cname {";
         $typedef .= self::getMemberStatement(static::class);
-        return $typedef . "} $cname;";
+        return $typedef . "};";
     }
 
     public static function getMemberStatement($className)

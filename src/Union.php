@@ -16,8 +16,8 @@ class Union extends Struct
     public static function getTypedef(): string
     {
         $cname = self::getCName();
-        $typedef = Type::NAME . self::SPACE . self::NAME . " _$cname {";
+        $typedef = self::NAME . " _$cname {";
         $typedef .= self::getMemberStatement(static::class);
-        return $typedef . "} $cname;";
+        return $typedef . "};";
     }
 }

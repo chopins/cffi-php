@@ -10,129 +10,257 @@
 
 namespace CFFI;
 
-use FFI as ExtFFI;
-use FFI\CData as ExtCData;
-use FFI\CType as ExtCType;
-use ReflectionAttribute;
-use ReflectionClass;
+use ReflectionType;
+use ReflectionNamedType;
+use ReflectionIntersectionType;
+use ReflectionParameter;
+use ReflectionProperty;
+use ReflectionObject;
 use ReflectionMethod;
-use ReflectionUnionType;
+use BadMethodCallException;
+use FFI as ExtFFI;
+use FFI\CData;
+use FFI\CType;
+use CFFI\CType\Pointer;
+use CFFI\CType\Unsigned;
+use CFFI\CType\Signed;
+use CFFI\CType\CArray;
+use CFFI\CType\Extern;
+use CFFI\CType\Stdcall;
+use CFFI\CType\Vectorcall;
+use CFFI\CType\Fastcall;
+
 
 abstract class FFI
 {
-    const SPACE = ' ';
-    const COMMA = ',';
-    public static function cdef($code = '', $lib = null): ExtFFI
+    private $ffiInstance;
+
+    private static $typeClassList = [];
+    private static $typeClassOrder = 0;
+    private $cfunction = [];
+
+    final public function __construct(string $lib = null)
     {
-        return ExtFFI::cdef($code, $lib);
+        $this->initFFIObject($lib);
     }
 
-    public function new($type, $owned = true, $persistent = false): ?ExtCData
+    final public function __call($name, $arguments)
     {
-        return ExtFFI::new($type, $owned, $persistent);
+        if (in_array($name, $this->cfunction)) {
+            $this->ffiInstance->$name(...$arguments);
+        }
+        throw new BadMethodCallException("Call to undefined method " . $this::class . ":{$name}()");
     }
 
-    public static function arrayType($type, $dim): ExtCType
+    final public function __get($name)
+    {
+        return $this->ffiInstance->$name;
+    }
+
+    final public function __set($name, $value)
+    {
+        $this->ffiInstance->$name = $value;
+    }
+
+    public function new($type, $owned = true, $persistent = false): ?CData
+    {
+        return $this->ffiInstance->new($type, $owned, $persistent);
+    }
+
+    public static function arrayType($type, $dim): CType
     {
         return ExtFFI::arrayType($type, $dim);
     }
-    public static function sizeof(ExtCData|ExtCType &$ptr): int
+    public static function sizeof(CData|CType &$ptr): int
     {
         return ExtFFI::sizeof($ptr);
     }
-    public static function addr(ExtCData &$ptr): ExtCData
+    public static function addr(CData &$ptr): CData
     {
         return ExtFFI::addr($ptr);
     }
 
-    public static function alignof(ExtCData|ExtCType &$ptr): int
+    public static function alignof(CData|CType &$ptr): int
     {
         return ExtFFI::alignof($ptr);
     }
 
-    public static function cast(ExtCType|string $type, ExtCData|int|float|bool|null &$ptr): ?ExtCData
+    public function cast(CType|string $type, CData|int|float|bool|null &$ptr): ?CData
     {
-        return ExtFFI::cast($type, $ptr);
+        return $this->ffiInstance->cast($type, $ptr);
     }
 
-    public static function free(ExtCData &$ptr): void
+    public static function free(CData &$ptr): void
     {
         ExtFFI::free($ptr);
     }
 
-    public static function reflectionClass(ReflectionClass $refl = null): ReflectionClass
+    public function getFFI()
     {
-        return $refl ?? new ReflectionClass(get_called_class());
+        return $this->ffiInstance;
     }
 
-    public static function parseFunction(ReflectionMethod $m, $callback = false, &$requireType = []): string
+    private function initFFIObject(string $lib): void
     {
-        $fnCdef = '';
-        $attr = $m->getAttributes(CCallType::class, ReflectionAttribute::IS_INSTANCEOF);
-        if ($attr) {
-            $fnCdef .= constant("{$attr[0]}::NAME");
-        }
+        self::$typeClassList = [];
+        self::$typeClassOrder = [];
+        $cdef = $this->parseFunctionCDef();
+        $typedef = $this->parseTypeCDef();
+        $this->ffiInstance = ExtFFI::cdef($typedef . $cdef, $lib);
+    }
 
-        $reflReturnType = $m->getReturnType();
-        $returnType = $reflReturnType->getName();
-
-        if(!$reflReturnType->isBuiltin() && get_parent_class($returnType) != Type::class) {
-            $requireType[] = $returnType;
-        }
-        if (is_subclass_of($returnType, ReturnPtr::class)) {
-            $fnCdef .= get_parent_class($returnType)::getCName();
-            $fnCdef .= $returnType::ptrLevel();
-        } else if ($reflReturnType->isBuiltin() && in_array($returnType, ['void', 'int', 'double', 'float'])) {
-            $fnCdef .= $returnType;
-        } else {
-            $fnCdef .= $returnType::getCName();
-        }
-
-        if ($m->returnsReference()) {
-            $fnCdef .= '*';
-        }
-        if ($callback) {
-            $fnCdef .= ' (*' . $m->name . ')(';
-        } else {
-            $fnCdef .= ' ' . $m->name . '(';
-        }
-        $fparam = $m->getParameters();
-        $comma = '';
-
-        foreach ($fparam as $p) {
-            $ptype = $p->getType();
-            if ($ptype instanceof ReflectionUnionType) {
-                foreach ($ptype->getTypes() as $t) {
-                    $tname = $t->getName();
-                    if (is_subclass_of($tname, Type::class)) {
-                        $typeName = $tname;
-                        break;
-                    }
-                }
+    private function parseTypeCDef(): string
+    {
+        $alias = $type = $struct = '';
+        foreach (self::$typeClassList as $class => $order) {
+            if ($class instanceof Struct) {
+                $cname = $class::getCName();
+                $struct .= $class::getTypedef();
+                $alias .= "typedef _{$cname} $cname;";
             } else {
-                $typeName = $ptype->getName();
+                $type .= $class::getTypedef();
+            }
+        }
+        return $type . $alias . $struct;
+    }
+
+    private function parseFunctionCDef(): string
+    {
+        self::$typeClassList = [];
+        $refObj = new ReflectionObject($this);
+        $cdef = $this->parseVariableCDef($refObj);
+        $methods = $refObj->getMethods(ReflectionMethod::IS_PRIVATE);
+        foreach ($methods as $method) {
+            if ($method->isStatic()) {
+                continue;
+            }
+            $functionModifier = '';
+            if ($method->getAttributes(Extern::class)) {
+                $functionModifier = Extern::NAME;
+            } else if ($method->getAttributes(Stdcall::class)) {
+                $functionModifier = Stdcall::NAME;
+            } else if ($method->getAttributes(Fastcall::class)) {
+                $functionModifier = Fastcall::NAME;
+            } else if ($method->getAttributes(Vectorcall::class)) {
+                $functionModifier = Vectorcall::NAME;
+            } else {
+                continue;
             }
 
-            if(get_parent_class($typeName) != Type::class) {
-                $requireType[] = $typeName;
+            $paramsType = self::parseFucntionModifier($method, $retTypeName);
+            $cdef .= "$functionModifier $retTypeName {$method->name}($paramsType);";
+            $this->cfunction[] = $method->name;
+        }
+        return $cdef;
+    }
+
+    private function parseVariableCDef(ReflectionObject $refObj): string
+    {
+        $properties = $refObj->getProperties(ReflectionProperty::IS_PRIVATE);
+        $variable = '';
+        foreach ($properties as $property) {
+            if ($property->isStatic()) {
+                continue;
             }
-            $fnCdef .= $comma . $typeName::getCName() . self::SPACE;
-            $dfv = null;
-            if ($p->isDefaultValueAvailable()) {
-                $dfv = $p->getDefaultValue();
+            if ($property->getAttributes(Extern::class)) {
+                $variable .= self::getTypeStatement($property) . ';';
             }
-            if (is_int($dfv)) {
-                $fnCdef .= str_repeat('*', $dfv);
-            } else if ($p->isPassedByReference()) {
-                $fnCdef .= '*';
+        }
+        return $variable;
+    }
+
+    public static function nameType2CName(ReflectionNamedType $type, string &$typeClass): string
+    {
+        $typeClass = $type->getName();
+        if ($typeClass instanceof Type) {
+            self::$typeClassList[$typeClass] = self::$typeClassOrder;
+            self::$typeClassOrder++;
+            return $typeClass::getCName();
+        }
+        return '';
+    }
+
+    public static function parseFucntionModifier(ReflectionMethod $refMethod, string &$retTypeName): string
+    {
+        $retType = $refMethod->getReturnType();
+        $signed = $pointer = '';
+        $cname = self::parseReflectionTypeModifier($retType, $signed, $pointer);
+        if (!$cname) {
+            throw new \TypeError('must have return type');
+        }
+        $retTypeName = "$signed $pointer";
+
+        $params = $refMethod->getParameters();
+        $paramsType = '';
+        foreach ($params as $refParam) {
+            if (!$refParam->hasType()) {
+                throw new \TypeError('function parmaters must have type');
             }
-            $fnCdef .= $p->name;
-            if ($p->isVariadic()) {
-                $fnCdef .= '...';
+            if ($refParam->isVariadic()) {
+                $paramsType .= '...';
+            } else {
+                $paramsType .= self::getTypeStatement($refParam) . ',';
             }
-            $comma = self::COMMA;
+        }
+        return rtrim($paramsType, ',');
+    }
+
+    public static function parseReflectionTypeModifier(ReflectionType $types, string &$signed, string &$pointer): string
+    {
+        $signed = $pointer = $typeClass = '';
+        if ($types instanceof \ReflectionNamedType) {
+            $cname = self::nameType2CName($types, $typeClass);
+        } else if ($types instanceof \ReflectionIntersectionType) {
+            $cname = '';
+            foreach ($types as $t) {
+                $tCName = self::nameType2CName($t, $typeClass);
+                if ($tCName) {
+                    $cname = $tCName;
+                } else if ($typeClass == Unsigned::class) {
+                    $signed = Unsigned::NAME;
+                } else if ($typeClass == Signed::class) {
+                    $signed = Signed::NAME;
+                } else if ($typeClass instanceof Pointer) {
+                    $pointer = $typeClass::NAME;
+                }
+            }
+        }
+        return $cname;
+    }
+
+    public static function getTypeStatement(ReflectionProperty|ReflectionParameter $scope): string
+    {
+        $variableName = $scope->name;
+        $type = $scope->getType();
+        $signed = $pointer = $carray = '';
+        $cname = self::parseReflectionTypeModifier($type, $signed, $pointer);
+        if (!$cname) {
+            return '';
         }
 
-        return $fnCdef . ');';
+        while ($level = $scope->getAttributes(Pointer::class)) {
+            if (!($level = $level[0]->getArguments())) {
+                $pointer = Pointer::NAME;
+                break;
+            }
+            if ($level[0] > 0) {
+                $pointer = str_repeat(Pointer::NAME, $level[0]);
+                break;
+            } else {
+                throw new \TypeError('Pointer level must greater than 0');
+            }
+        }
+        while ($size = $scope->getAttributes(CArray::class)) {
+            if (!($size = $size[0]->getArguments())) {
+                throw new \TypeError('C array must have size');
+            }
+            if ($size[0] > 0) {
+                $carray = "[{$size[0]}]";
+                break;
+            } else {
+                throw new \TypeError('C array size must greater than 0');
+            }
+        }
+        return "$signed $cname $pointer $variableName $carray";
     }
 }
