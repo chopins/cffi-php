@@ -14,6 +14,9 @@ namespace CFFI;
 use CFFI\CType\Unsigned;
 use CFFI\CType\Signed;
 use CFFI\CType\Callback;
+use CFFI\CType\Pointer;
+use CFFI\CType\CArray;
+
 abstract class Type extends FFI
 {
     private $cobj;
@@ -50,7 +53,7 @@ abstract class Type extends FFI
             throw new \TypeError("Undefined type");
         }
 
-        $signed = '';
+        $signed = $pointer = $carray = '';
         foreach ($modifiers as $modifier) {
             if ($modifier == Unsigned::class) {
                 $signed = Unsigned::NAME;
@@ -58,9 +61,13 @@ abstract class Type extends FFI
                 $signed = Signed::NAME;
             } else if ($modifier == Callback::class) {
                 return self::getFucntionTypedef($cname);
+            } else if ($modifier == Pointer::class) {
+                $pointer = $modifier::NAME;
+            } else if ($modifier == CArray::class) {
+                $carray = '[' . $modifier::SIZE . ']';
             }
         }
-        return self::NAME . " $signed $baseType $cname;";
+        return self::NAME . " $signed $baseType $pointer $cname{$carray};";
     }
 
     public static function getFucntionTypedef(string $cname): string
