@@ -20,7 +20,6 @@ use ReflectionUnionType;
 
 abstract class FFI
 {
-    const TYPEDEF = 'typedef';
     const SPACE = ' ';
     const COMMA = ',';
     public static function cdef($code = '', $lib = null): ExtFFI

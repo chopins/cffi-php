@@ -13,8 +13,15 @@ namespace CFFI;
 use ReflectionClass;
 use ReflectionProperty;
 use ReflectionUnionType;
+use ReflectionIntersectionType;
+use ReflectionNamedType;
+use CFFI\Type;
+use CFFI\CType\CArray;
+use CFFI\CType\Pointer;
+use CFFI\CType\Unsigned;
+use CFFI\CType\Signed;
 
-class Struct extends FFI
+class Struct extends Type
 {
     const NAME = 'struct';
     private $cobj;
@@ -27,16 +34,25 @@ class Struct extends FFI
         }
     }
 
-    public static function getCName(?ReflectionClass $refl = null)
+    public static function getTypedef(): string
     {
-        $refl = self::reflectionClass($refl);
-        return $refl->getShortName();
+        $cname = self::getCName();
+        $typedef = parent::NAME . self::SPACE . self::NAME . " _$cname {";
+        $typedef .= self::getMemberStatement(static::class);
+        return $typedef . "} $cname;";
     }
 
-    public static function getDeclared()
+    public static function getMemberStatement($className)
     {
-        $name = static::getCName();
-        return self::TYPEDEF . self::SPACE . self::NAME . " $name $name;";
+        $refCls = new ReflectionClass($className);
+        $properties = $refCls->getProperties(ReflectionProperty::IS_STATIC);
+        $statement = '';
+        foreach ($properties as $property) {
+            if ($property->isPublic() && $property->hasType()) {
+                $statement .= self::getTypeStatement($property) . ';';
+            }
+        }
+        return $statement;
     }
 
     public function __set($name, $value)
@@ -47,70 +63,5 @@ class Struct extends FFI
     public function __get($name)
     {
         $this->cobj->cdata->$name;
-    }
-
-    public static function getDef(&$requireType = []): string
-    {
-        $refl = self::reflectionClass();
-        $name = self::getCName($refl);
-        $lastReq = $requireType;
-        $member = self::getMemberDef($refl, $requireType);
-        if (empty($member)) {
-            $parent = $refl->getParentClass();
-            $pn = $parent->name;
-            if ($parent->getParentClass() != Type::class) {
-                $requireType[] = $pn;
-            }
-            return self::TYPEDEF . self::SPACE . self::NAME . self::SPACE . $pn::getCName() . self::SPACE . "$name;";
-        }
-        $prefix = '';
-        if (array_search($refl->name, array_diff_assoc($requireType, $lastReq)) !== false) {
-            $prefix = self::TYPEDEF . self::SPACE . self::NAME . " $name $name;";
-        }
-        return $prefix . self::TYPEDEF . self::SPACE . self::NAME . " $name { $member } $name;";
-    }
-    public static function getMemberDef(ReflectionClass $ref = null, &$requireType = [])
-    {
-        $ref = self::reflectionClass($ref);
-        $properties = $ref->getProperties(ReflectionProperty::IS_PRIVATE);
-        $define = '';
-        foreach ($properties as $p) {
-            $type = $p->getType();
-            $pname = $p->name;
-            if ($type instanceof ReflectionUnionType) {
-                foreach ($type->getTypes() as $t) {
-                    $tname = $t->getName();
-                    if (is_subclass_of($tname, Type::class)) {
-                        $typeName = $tname;
-                        break;
-                    }
-                }
-            } else {
-                $typeName = $type->getName();
-            }
-
-            if (is_subclass_of($typeName, Callback::class)) {
-                $define .= str_replace(self::TYPEDEF, '', $typeName::getDef($requireType));
-                continue;
-            } else {
-                $ctype = $typeName::getCName();
-            }
-            if (get_parent_class($typeName) != Type::class) {
-                $requireType[] = $typeName;
-            }
-
-            $value = $p->getDefaultValue();
-            $array = '';
-            if (is_array($value)) {
-                foreach ($value as $v) {
-                    $array .= "[$v]";
-                }
-            } else if (is_int($value)) {
-                $ctype .= str_repeat('*', $value);
-            }
-            $define .= "$ctype {$pname}{$array};";
-        }
-
-        return $define;
     }
 }

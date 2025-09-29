@@ -10,16 +10,14 @@
 
 namespace CFFI;
 
-use ReflectionClass;
-
 class Union extends Struct
 {
     const NAME = 'union';
-    public static function getDef(&$requireType = []): string
+    public static function getTypedef(): string
     {
-        $refl = self::reflectionClass();
-        $name = self::getCName($refl);
-        $member = self::getMemberDef($refl, $requireType);
-        return self::TYPEDEF . self::SPACE . self::NAME . " $name { $member } $name;";
+        $cname = self::getCName();
+        $typedef = Type::NAME . self::SPACE . self::NAME . " _$cname {";
+        $typedef .= self::getMemberStatement(static::class);
+        return $typedef . "} $cname;";
     }
 }
