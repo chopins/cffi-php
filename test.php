@@ -2,17 +2,20 @@
 
 namespace Test;
 
-use CFFI\Callback;
-use CFFI\Char;
-use CFFI\Func;
-use CFFI\Int32;
-use CFFI\LongInt;
+use CFFI\FFI;
+use CFFI\CType\Callback;
+use CFFI\CType\Char;
+use CFFI\CType\Int32;
+use CFFI\CType\Int64;
 use CFFI\Struct;
 use CFFI\Type;
-use CFFI\Unsigned;
-use CFFI\VoidPointer;
+use CFFI\CType\Unsigned;
+use CFFI\CType\CVoid;
+use CFFI\CType\_;
+use CFFI\CType\Extern;
 
 include_once __DIR__ . '/src/load.php';
+
 
 class tm extends Struct
 {
@@ -25,32 +28,22 @@ class tm extends Struct
     private Int32 $tm_wday;
     private Int32 $tm_yday;
     private Int32 $tm_isdst;
-    private LongInt $tm_gmtoff;
+    private Int64 $tm_gmtoff;
     private Char|int $tm_zone = 1;
 }
 
-class uiForEach extends Int32 implements Unsigned
-{
-}
-class size_t extends Type
-{
-}
-class uint32_t extends Type
-{
-}
-class uintptr_t extends Type
-{
-}
+class uiForEach extends Int32 implements Unsigned {}
+class size_t extends Int32 implements Unsigned {}
+class uint32_t extends Int32 implements Unsigned {}
+class uintptr_t extends Int64 implements Unsigned {}
 
 class Destroy extends Callback
 {
-    public function Destroy(uiControl &$p): void
-    {
-    }
+    public function __invoke(uiControl &$p): void {}
 }
 class Handle extends Callback
 {
-    public function Handle(uiControl &$p): uintptr_t
+    public function __invoke(uiControl &$p): uintptr_t
     {
         return new uintptr_t;
     }
@@ -69,30 +62,25 @@ class uiInitOptions extends Struct
 {
     private size_t $Size;
 }
+
 class ChangeCallback extends Callback
 {
-    public function ChangeCallback(uiWindow &$w, VoidPointer $d): void
-    {
-    }
+    public function __invoke(uiWindow &$w,  CVoid&_ $d): void {}
 }
 class uiWindow extends uiControl
 {
     public const DECLARATION_ORDER = 2;
 }
-
-class Libui  extends Func
+class Libui2 extends FFI
 {
-    private function uiControlDestroy(uiControl &$p): void
-    {
+    #[Extern]
+    public function uiControlDestroy(uiControl &$p): void {}
+    #[Extern]
+    public function &uiAllocControl(size_t $n, uint32_t $OSsig, uint32_t $typesig, Char &$typenamestr): uiControl {
+        return new uiControl();
     }
-    private function &uiAllocControl(size_t $n, uint32_t $OSsig, uint32_t $typesig, Char &$typenamestr): uiControl
-    {
-        return new uiControl;
-    }
-    private function uiWindowOnContentSizeChanged(uiWindow &$w, ChangeCallback $f, VoidPointer $data): void
-    {
-    }
+    #[Extern]
+    public function uiWindowOnContentSizeChanged(uiWindow &$w, ChangeCallback $f, CVoid&_ $data): void {}
 }
 
-$ui = new Libui('../http/shared/libui.so');
-
+$ui = new Libui2('../http/shared/libui.so');

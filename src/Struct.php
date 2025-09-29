@@ -23,7 +23,7 @@ class Struct extends Type
         $cdef = self::getCName();
         $this->cobj = $this->new($cdef, $owned, $persistent);
         foreach ($v as $k => $value) {
-            $this->cobj->cdata->$k = $value;
+            $this->cobj->$k = $value;
         }
     }
 
@@ -38,10 +38,13 @@ class Struct extends Type
     public static function getMemberStatement($className)
     {
         $refCls = new ReflectionClass($className);
-        $properties = $refCls->getProperties(ReflectionProperty::IS_STATIC);
+        $properties = $refCls->getProperties(ReflectionProperty::IS_PRIVATE);
         $statement = '';
         foreach ($properties as $property) {
-            if ($property->isPublic() && $property->hasType()) {
+            if($property->isStatic()) {
+                continue;
+            }
+            if ($property->hasType()) {
                 $statement .= self::getTypeStatement($property) . ';';
             }
         }
