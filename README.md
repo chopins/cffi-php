@@ -58,11 +58,7 @@ class callback_function extends Callback {
     public function __invoke(Int32 $arg):Int32 {
     }
 }
-class HashTablePtr extends HashTable implements ReturnPtr {
-    public static function ptrLevel() : int {
-        return '**';//return 2 level of pointer
-    }
-}
+
 class PhpCall extends Func { //only same namespace below class type/struct be used
     private Int32 $globalVar; //extern int globalVar;
     private Char|_ $globalVar2; //extern char* globalVar;
@@ -70,11 +66,13 @@ class PhpCall extends Func { //only same namespace below class type/struct be us
     const DAY = [ 1 => 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];//enum
 
     #[Stdcall]
-    private function zend_array_dup(HashTable $source = 1):HashTablePtr & _ {
+    private function zend_array_dup(HashTable & __ $source):HashTable & __ {
         return new HashTable;
     }
     private function zend_hash_find(HashTable&_ $ht, zend_string & _ $key):zval & __ {
         return new zval;
     }
 }
+$lib = new PhpCall;
+$lib->zend_hash_find();
 ```
