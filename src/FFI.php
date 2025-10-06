@@ -188,6 +188,9 @@ abstract class FFI
         if (!$cname) {
             throw new \TypeError('must have return type');
         }
+        if(empty($pointer) && $refMethod->returnsReference()) {
+            $pointer = Pointer::NAME;
+        }
         $retTypeName = "$signed $pointer";
 
         $params = $refMethod->getParameters();
@@ -249,6 +252,9 @@ abstract class FFI
             } else {
                 throw new \TypeError('Pointer level must greater than 0');
             }
+        }
+        if(empty($pointer) && $scope instanceof ReflectionParameter && $scope->isPassedByReference()) {
+            $pointer = Pointer::NAME;
         }
         while ($size = $scope->getAttributes(CArray::class)) {
             if (!($size = $size[0]->getArguments())) {
