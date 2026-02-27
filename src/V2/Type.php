@@ -36,6 +36,15 @@ interface ____ extends Pointer
 {
     const KEY = '****';
 }
+interface Signed extends CFFI
+{
+    const KEY = 'signed';
+}
+
+interface Unsigned extends CFFI
+{
+    const KEY = 'unsigned';
+}
 
 #[\Attribute(\Attribute::TARGET_METHOD | \Attribute::TARGET_PROPERTY)]
 enum CallingConvention: string implements CFFI
@@ -45,16 +54,6 @@ enum CallingConvention: string implements CFFI
     case Stdcall = '__stdcall';
     case Fastcall = '__fastcall';
     case Cdecl = '__cdecl';
-}
-
-interface Signed extends CFFI
-{
-    const KEY = 'signed';
-}
-
-interface Unsigned extends CFFI
-{
-    const KEY = 'unsigned';
 }
 
 enum ByteOrder implements CFFI
