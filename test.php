@@ -1,86 +1,57 @@
 <?php
 
-namespace Test;
+include_once __DIR__ . '/src/V2/Type.php';
 
-use CFFI\FFI;
-use CFFI\CType\Callback;
-use CFFI\CType\Char;
-use CFFI\CType\Int32;
-use CFFI\CType\Int64;
-use CFFI\Struct;
-use CFFI\Type;
-use CFFI\CType\Unsigned;
-use CFFI\CType\CVoid;
-use CFFI\CType\_;
-use CFFI\CType\Extern;
-
-include_once __DIR__ . '/src/load.php';
-
-
-class tm extends Struct
+class A1 extends \CFFI\Struct
 {
-    private Int32 $tm_sec;
-    private Int32 $tm_min;
-    private Int32 $tm_hour;
-    private Int32 $tm_mday;
-    private Int32 $tm_mon;
-    private Int32 $tm_year;
-    private Int32 $tm_wday;
-    private Int32 $tm_yday;
-    private Int32 $tm_isdst;
-    private Int64 $tm_gmtoff;
-    private Char|int $tm_zone = 1;
+    const NAME = 'a1';
+    public \CFFI\Int32 $a;
+    public \CFFI\Char|array $arr = [3];
 }
 
-class uiForEach extends Int32 implements Unsigned {}
-class size_t extends Int32 implements Unsigned {}
-class uint32_t extends Int32 implements Unsigned {}
-class uintptr_t extends Int64 implements Unsigned {}
-
-class Destroy extends Callback
+class tm extends \CFFI\Struct
 {
-    public function __invoke(uiControl &$p): void {}
-}
-class Handle extends Callback
-{
-    public function __invoke(uiControl &$p): uintptr_t
-    {
-        return new uintptr_t;
-    }
-}
-
-class uiControl extends Struct
-{
-    private uint32_t $Signature;
-    private uint32_t $OSSignature;
-    private uint32_t $TypeSignature;
-    private Destroy $Destroy;
-    private Handle $Handle;
-    public const DECLARATION_ORDER = 1;
-}
-class uiInitOptions extends Struct
-{
-    private size_t $Size;
+    const NAME = 'tm';
+    public \CFFI\Int32 $tm_sec;
+    public \CFFI\Int32 $tm_min;
+    public \CFFI\Int32 $tm_hour;
+    public \CFFI\Int32 $tm_mday;
+    public \CFFI\Int32 $tm_mon;
+    public \CFFI\Int32 $tm_year;
+    public \CFFI\Int32 $tm_wday;
+    public \CFFI\Int32 $tm_yday;
+    public \CFFI\Int32 $tm_isdst;
+    public \CFFI\Int32  $tm_gmtoff;
+    public \CFFI\Char|\CFFI\_ $tm_zone;
 }
 
-class ChangeCallback extends Callback
+class uintptr_t extends \CFFI\Int32 implements \CFFI\Unsigned {}
+
+abstract class uiControl extends \CFFI\Struct
 {
-    public function __invoke(uiWindow &$w,  CVoid&_ $d): void {}
-}
-class uiWindow extends uiControl
+    const NAME = 'uiControl';
+    public \CFFI\Int32|\CFFI\Unsigned $Signature;
+    public \CFFI\Int32|\CFFI\Unsigned $OSSignature;
+    public \CFFI\Int32|\CFFI\Unsigned $TypeSignature;
+    abstract public function Destroy(uiControl |\CFFI\_ $a): \CFFI\CVoid;
+    abstract public function  Handle(uiControl |\CFFI\_ $a): uintptr_t;
+    abstract public function Parent(uiControl|\CFFI\_ $a): uiControl|\CFFI\_;
+    abstract public function SetParent(uiControl|\CFFI\_ $a, uiControl|\CFFI\_ $b): CFFI\CVoid;
+    abstract public function Toplevel(uiControl|\CFFI\_ $a): int;
+    abstract public function Visible(uiControl|\CFFI\_ $a): int;
+    abstract public function Show(uiControl|\CFFI\_ $a): \CFFI\CVoid;
+    abstract public function Hide(uiControl|\CFFI\_ $a): \CFFI\CVoid;
+    abstract public function Enabled(uiControl|\CFFI\_ $a): int;
+    abstract public function Enable(uiControl|\CFFI\_ $a): \CFFI\CVoid;
+    abstract public function Disable(uiControl|\CFFI\_ $a): \CFFI\CVoid;
+};
+
+abstract class test extends \CFFI\CDefine
 {
-    public const DECLARATION_ORDER = 2;
-}
-class Libui2 extends FFI
-{
-    #[Extern]
-    public function uiControlDestroy(uiControl &$p): void {}
-    #[Extern]
-    public function &uiAllocControl(size_t $n, uint32_t $OSsig, uint32_t $typesig, Char &$typenamestr): uiControl {
-        return new uiControl();
-    }
-    #[Extern]
-    public function uiWindowOnContentSizeChanged(uiWindow &$w, ChangeCallback $f, CVoid&_ $data): void {}
+    #[\CFFI\CFFI(\CFFI\CallingConvention::Extern)]
+    abstract protected function uiControlParent(uiControl|\CFFI\_ $a): \CFFI\Int32;
 }
 
-$ui = new Libui2('../http/shared/libui.so');
+
+test::load();
+
