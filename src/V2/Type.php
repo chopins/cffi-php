@@ -91,22 +91,70 @@ abstract class Type implements CFFI
     const C_ARRAY = 'array';
     private $cvalue;
     private static $defaultByteOrder = ByteOrder::HOST_BYTE_ORDER;
+    public static ?\FFI $cffi = null;
 
-    public  function __construct($value = null, bool $owned = true, bool $persistent = false)
+    public function __construct($value = null, bool $owned = true, bool $persistent = false)
     {
-        $ffi = $this->getFFI();
-        $this->cvalue = $ffi->new(static::NAME, $owned, $persistent);
+        if (!self::$cffi) {
+            throw new \RuntimeException("muset set FFI object");
+        }
+        $this->cvalue = self::$cffi->new(static::NAME, $owned, $persistent);
+        $this->setValue($value);
+    }
+
+    protected function setValue($value)
+    {
         $this->cvalue->cdata = $value;
+    }
+
+    public function setFFI(\FFI $cffi)
+    {
+        self::$cffi = $cffi;
+    }
+
+    public function addr()
+    {
+        return \FFI::addr($this->cvalue);
+    }
+
+    public function free()
+    {
+        return $this->__destruct();
+    }
+
+    public function typeof()
+    {
+        return \FFI::typeof($this->cvalue);
+    }
+
+    public function memset(int $value, int $size)
+    {
+        return \FFI::memset($this->cvalue, $value, $size);
+    }
+
+    public function __toString()
+    {
+        return \FFI::string($this->cvalue);
+    }
+
+    public static function sizeof()
+    {
+        return \FFI::sizeof(static::NAME);
+    }
+
+    public function isNull()
+    {
+        return \FFI::isNull($this->cvalue);
+    }
+
+    public function __destruct()
+    {
+        return \FFI::free($this->cvalue);
     }
 
     public function getValue()
     {
         return $this->cvalue;
-    }
-
-    public function getFFI()
-    {
-        return \FFI::cdef();
     }
 
     public static function getTypedef(array &$depsType = []): void
@@ -246,7 +294,12 @@ class Float32 extends Type
 abstract class Struct extends Type
 {
     const KEY = 'struct';
-
+    protected function setValue($value)
+    {
+        foreach($value as $feild => $v) {
+            $this->cvalue->$feild = $v;
+        }
+    }
     public static function getTypedef(array &$depsType = []): void
     {
         $refCls = new \ReflectionClass(static::class);
@@ -317,8 +370,8 @@ abstract class CDefine implements CFFI
     final public static function load($lib = '')
     {
         $code = self::getCDef();
-        echo $code;
         self::$ffi = \FFI::cdef($code, $lib);
+        return self::$ffi;
     }
 
     final public static function __callStatic($name, $arguments)
