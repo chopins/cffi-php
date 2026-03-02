@@ -89,72 +89,102 @@ abstract class Type implements CFFI
     const C_LONG_DOUBLE = 'long double';
     const C_VOID = 'void';
     const C_ARRAY = 'array';
-    private $cvalue;
     private static $defaultByteOrder = ByteOrder::HOST_BYTE_ORDER;
     public static ?\FFI $cffi = null;
 
-    public function __construct($value = null, bool $owned = true, bool $persistent = false)
+    public static function new($value = null, bool $owned = true, bool $persistent = false)
     {
         if (!self::$cffi) {
-            throw new \RuntimeException("muset set FFI object");
+            $ffi = \FFI::cdef();
+        } else {
+            $ffi = self::$cffi;
         }
-        $this->cvalue = self::$cffi->new(static::NAME, $owned, $persistent);
-        $this->setValue($value);
+        $cdata = $ffi->new(self::type(), $owned, $persistent);
+        if ($value !== null) {
+            self::setValue($cdata, $value);
+        }
+        return $cdata;
     }
 
-    protected function setValue($value)
+    public static function newArray(array $value, bool $owned = true, bool  $persistent = false)
     {
-        $this->cvalue->cdata = $value;
+        if (!self::$cffi) {
+            $ffi = \FFI::cdef();
+        } else {
+            $ffi = self::$cffi;
+        }
+        $e = $value;
+        $dim = [];
+        do {
+            $dim[] = count($e);
+            $e = $e[0];
+        } while (is_array($e));
+
+        $type = \FFI::arrayType(self::type(), [array_product($dim)]);
+        $cdata = $ffi->new($type, $owned, $persistent);
+        array_walk_recursive($value, function ($value) use (&$cdata) {
+            $cdata[] = $value;
+        });
+        return \FFI::cast(\FFI::arrayType(self::type(), $dim), $cdata);
     }
 
-    public function setFFI(\FFI $cffi)
+    public static function cast(\FFI\CData|int|float|bool|null $ptr): \FFI\CData
+    {
+        return \FFI::cast(self::type(), $ptr);
+    }
+
+    public static function type()
+    {
+        if (self::$cffi) {
+            return self::$cffi->type(static::NAME);
+        } else {
+            return \FFI::cdef()->type(static::NAME);
+        }
+    }
+
+    public static function setValue(\FFI\CData $cdata, $value)
+    {
+        $cdata->cdata = $value;
+    }
+
+    public static function setFFI(\FFI $cffi)
     {
         self::$cffi = $cffi;
     }
 
-    public function addr()
+    public static function addr(\FFI\CData $cdata)
     {
-        return \FFI::addr($this->cvalue);
+        return \FFI::addr($cdata);
     }
 
-    public function free()
+    public static function free(\FFI\CData $cdata)
     {
-        return $this->__destruct();
+        return \FFI::free($cdata);
     }
 
-    public function typeof()
+    public static function typeof(\FFI\CData $cdata)
     {
-        return \FFI::typeof($this->cvalue);
+        return \FFI::typeof($cdata);
     }
 
-    public function memset(int $value, int $size)
+    public static function memset(\FFI\CData $cdata, int $value, int $size)
     {
-        return \FFI::memset($this->cvalue, $value, $size);
+        return \FFI::memset($cdata, $value, $size);
     }
 
-    public function __toString()
+    public static function string(\FFI\CData $cdata)
     {
-        return \FFI::string($this->cvalue);
+        return \FFI::string($cdata);
     }
 
     public static function sizeof()
     {
-        return \FFI::sizeof(static::NAME);
+        return \FFI::sizeof(self::type());
     }
 
-    public function isNull()
+    public static function isNull(\FFI\CData $cdata)
     {
-        return \FFI::isNull($this->cvalue);
-    }
-
-    public function __destruct()
-    {
-        return \FFI::free($this->cvalue);
-    }
-
-    public function getValue()
-    {
-        return $this->cvalue;
+        return \FFI::isNull($cdata);
     }
 
     public static function getTypedef(array &$depsType = []): void
@@ -162,11 +192,30 @@ abstract class Type implements CFFI
         if (static::BASE_TYPE) {
             return;
         }
-        $unsigned = static::class instanceof Unsigned ? Unsigned::KEY : '';
         $pclass = get_parent_class(static::class);
+        if ($pclass == self::class) {
+            $invoke = new \ReflectionMethod(static::class, '__invoke');
+            $depsType[static::NAME] = self::NAME . ' ' . self::getFunctionDef($invoke, static::NAME, $depsType);
+            return;
+        }
+        $unsigned = static::class instanceof Unsigned ? Unsigned::KEY : '';
         $depsType[static::NAME] = self::NAME . " $unsigned " . $pclass::NAME . ' ' . static::NAME . PHP_EOL;
         return;
     }
+
+    public static function getFunctionDef(\ReflectionMethod $m, $name, &$depsType)
+    {
+        $code = Type::getType($m->getReturnType(), $depsType) . ' ';
+        $code .= $name . '(';
+        foreach ($m->getParameters() as $p) {
+            $code .= Type::getType($p->getType(), $depsType) . ' ';
+            $code .= $p->getName() . ',';
+        }
+        $code = rtrim($code, ',');
+        $code .= ');';
+        return $code;
+    }
+
     public static function setDefaultByteOrder(ByteOrder $byteOrder)
     {
         self::$defaultByteOrder = $byteOrder;
@@ -294,10 +343,10 @@ class Float32 extends Type
 abstract class Struct extends Type
 {
     const KEY = 'struct';
-    protected function setValue($value)
+    public static function setValue(\FFI\CData $cdata, $value)
     {
-        foreach($value as $feild => $v) {
-            $this->cvalue->$feild = $v;
+        foreach ($value as $feild => $v) {
+            $cdata->$feild = $v;
         }
     }
     public static function getTypedef(array &$depsType = []): void
@@ -306,6 +355,7 @@ abstract class Struct extends Type
         if (isset($depsType[static::NAME])) {
             return;
         }
+
         $depsType[static::NAME] = Type::NAME . ' ' . static::KEY . ' ' . static::NAME . ' ' . static::NAME . ';';
         $code = static::KEY . ' ' . static::NAME . ' { ';
         foreach ($refCls->getProperties(\ReflectionProperty::IS_PUBLIC) as $property) {
@@ -321,25 +371,16 @@ abstract class Struct extends Type
                     $code .= "[$i]";
                 }
             }
-            $code .= ';' . PHP_EOL;
+            $code .= ';';
         }
 
         foreach ($refCls->getMethods(\ReflectionMethod::IS_ABSTRACT) as $mes) {
             if ($mes->isStatic() || !$mes->hasReturnType() || !$mes->isPublic()) {
                 continue;
             }
-
-            $code .= self::getType($mes->getReturnType(), $depsType);
-            $code .= '(*' . $mes->name . ')';
-            $code .= '(';
-            foreach ($mes->getParameters() as $p) {
-                $code .= Type::getType($p->getType(), $depsType) . ' ';
-                $code .= $p->getName() . ',';
-            }
-            $code = rtrim($code, ',');
-            $code .= ');' . PHP_EOL;
+            $code .= self::getFunctionDef($mes, '(*' . $mes->name . ')', $depsType);
         }
-        $code .= '};' . PHP_EOL;
+        $code .= '};';
         $depsType[static::NAME] .= $code;
         return;
     }
@@ -366,10 +407,11 @@ abstract class Union extends Struct
 
 abstract class CDefine implements CFFI
 {
-    private static $ffi;
+    private static \FFI $ffi;
+    const ENUM = [];
     final public static function load($lib = '')
     {
-        $code = self::getCDef();
+        $code = self::enum() . self::getCDef();
         self::$ffi = \FFI::cdef($code, $lib);
         return self::$ffi;
     }
@@ -377,6 +419,92 @@ abstract class CDefine implements CFFI
     final public static function __callStatic($name, $arguments)
     {
         return self::$ffi->$name(...$arguments);
+    }
+
+    final public static function getZval($var)
+    {
+        $code = 'typedef struct{void *res;uint32_t type_info;uint32_t num_args;} zval;
+        typedef struct _zend_execute_data zend_execute_data;
+        struct _zend_execute_data {
+            const void *opline;
+            zend_execute_data *call;
+            zval *return_value;
+            void *func;
+            zval This;
+            zend_execute_data *prev_execute_data;
+            void *symbol_table;
+            void **run_time_cache;
+            void *extra_named_params;
+        };
+        typedef struct {
+            zval uninitialized_zval;
+            zval error_zval;
+            void *symtable_cache[__SYMTABLE_CACHE_SIZE__];
+            void **symtable_cache_limit;
+            void **symtable_cache_ptr;
+            char symbol_table[__ZEND_ARRAY_SIZE__];
+            char included_files[__ZEND_ARRAY_SIZE__];
+            void *bailout;
+            int error_reporting;
+            __PHP85_EG_FEILDS__
+            int exit_status;
+            void *function_table;
+            void *class_table;
+            void *zend_constants;
+            zval *vm_stack_top;
+            zval *vm_stack_end;
+            void* vm_stack;//zend_vm_stack, typedef struct _zend_vm_stack *zend_vm_stack;
+            size_t vm_stack_page_size;
+            void *current_execute_data;
+            void *fake_scope;
+            /* Other member fields are omitted .... */
+            /* ....... */
+        } zend_executor_globals;';
+        $code = \str_replace(
+            ['__SYMTABLE_CACHE_SIZE__', '__ZEND_ARRAY_SIZE__', 'zend_long', '__PHP85_EG_FEILDS__'],
+            [
+                32,
+                48 + \PHP_INT_SIZE,
+                \PHP_INT_SIZE == 8 ? 'int64_t' : 'int32_t',
+                \PHP_VERSION_ID >= 80500 ? 'bool fatal_error_backtrace_on;zval last_fatal_error_backtrace;' : '',
+            ],
+            $code
+        );
+        if (\PHP_ZTS) {
+            $code .= 'void *tsrm_get_ls_cache(void);size_t executor_globals_offset;';
+        } else {
+            $code .= 'zend_executor_globals executor_globals;';
+        }
+        $ffi = \FFI::cdef($code);
+        if (\PHP_ZTS) {
+            $tsrm = $ffi->cast('char*', $ffi->tsrm_get_ls_cache());
+            $cex = $ffi->cast('zend_executor_globals*', $tsrm + $ffi->executor_globals_offset)->current_execute_data;
+        } else {
+            $cex = $ffi->executor_globals->current_execute_data;
+        }
+        $ex = $ffi->cast('zval*', $cex);
+        $zvalSize = FFI::sizeof($ffi->type('zval'));
+        $exSize = FFI::sizeof($ffi->type('zend_execute_data'));
+        $arg = $ex + (($exSize + $zvalSize - 1) / $zvalSize);
+        return $ffi->cast('zval', $arg);
+    }
+
+    final public static function enum(): string
+    {
+        $enumCDef = '';
+        foreach (static::ENUM as $enum) {
+            $enumCDef .= 'typedef enum {';
+            foreach ($enum as $k => $v) {
+                if (is_string($v) && is_int($k)) {
+                    $enumCDef .= "$v,";
+                } else if (is_string($k) && is_int($v)) {
+                    $enumCDef .= "$k = $v,";
+                }
+            }
+            $enumCDef = rtrim($enumCDef, ',');
+            $enumCDef .= "};";
+        }
+        return $enumCDef;
     }
 
     final public static function getCDef(): string
@@ -395,15 +523,7 @@ abstract class CDefine implements CFFI
                 }
                 continue;
             }
-
-            $code .= Type::getType($m->getReturnType(), $depsType) . ' ';
-            $code .= $m->getName() . '(';
-            foreach ($m->getParameters() as $p) {
-                $code .= Type::getType($p->getType(), $depsType) . ' ';
-                $code .= $p->getName() . ',';
-            }
-            $code = rtrim($code, ',');
-            $code .= ');';
+            $code .= Type::getFunctionDef($m, $m->getName(), $depsType);
         }
         return implode('', $depsType) .  $code;
     }
