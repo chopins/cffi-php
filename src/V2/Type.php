@@ -355,9 +355,9 @@ abstract class Struct extends Type
         if (isset($depsType[static::NAME])) {
             return;
         }
-
-        $depsType[static::NAME] = Type::NAME . ' ' . static::KEY . ' ' . static::NAME . ' ' . static::NAME . ';';
-        $code = static::KEY . ' ' . static::NAME . ' { ';
+        $className = $refCls->getShortName();
+        $depsType[static::NAME] = Type::NAME . ' ' . static::KEY . " _$className " . static::NAME . ';';
+        $code = static::KEY . " _$className { ";
         foreach ($refCls->getProperties(\ReflectionProperty::IS_PUBLIC) as $property) {
             if ($property->isStatic() || !$property->hasType()) {
                 continue;
