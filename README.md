@@ -12,7 +12,7 @@
 | `typedef`                     | `C\Type`                                             | 类型声明继承该类                         |
 | `typedef struct`              | `C\Struct`                                           | 结构声明继承该类                         |
 | `[]`                          | `C\CArray`                                           |                                          |
-| 结构中 `int32_t[10] a`        | `protected Int32 $a =[10];`                          | attributes declaration array             |
+| 结构中 `int32_t[10] a`        | `protected Int32\|array $a =[10];`                   | attributes declaration array             |
 | `typedef int32_t[10] A`       | `#[C\CArray(10)] class A extends Int32 {}`           | typedef array type                       |
 | `typedef int8*(*fn)(int* p)`  | `#[C\Type] function &fn(int &$p):int8 {}`            | 未声明类型时为 `void`                    |
 | `void`                        | `class C\CVoid` or `void`                            |                                          |
@@ -24,15 +24,15 @@
 | `int16_t`                     | `class C\Int16`                                      |                                          |
 | `int32_t`                     | `class C\Int32`                                      |                                          |
 | `int64_t`                     | `class C\Int64`                                      |                                          |
-| `signed`                      | `interface C\Signed`                                 | use IntersectionType  declaration        |
-| `unsigned`                    | `interface C\unsigned`                               | use IntersectionType  declaration        |
+| `signed`                      | `interface C\Signed` or `#[C\signed]`                | use IntersectionType  declaration        |
+| `unsigned`                    | `interface C\unsigned`or `#[C\unsigned]`             | use IntersectionType  declaration        |
 | `extern`                      | `#[C\Extern]`                                        | attributes                               |
 | `__stdcall`                   | `#[C\Stdcall]`                                       | attributes                               |
 | `__vectorcall`                | `#[C\Vectorcall]`                                    | attributes                               |
 | `__fastcall`                  | `#[C\Fastcall]`                                      | attributes                               |
 | 结构中函数`int8（*fn)(int p)` | `abstract protected function fn(int $p):int8`        | attributes                               |
-| C函数导入                     | `abstract class C\Import`                             | 用户类继承                               |
-| C库加载                       | `C\Import::dl($path)`                                 |                                          |
+| C函数导入                     | `abstract class C\Import`                            | 用户类继承                               |
+| C库加载                       | `C\Import::dl($path)`                                |                                          |
 | 导入的C函数定义               | `abstract protected static function fn(int $p):int8` |                                          |
 | 导入的C变量                   | `protected static int8 $a`                           | 外部按public访问                         |
 | 导入的C enum                  | `const ENUM = []`                                    | 每各枚举列表一个数组，外部可按类常量访问 |
@@ -63,52 +63,51 @@ zval* zend_hash_find(const HashTable *ht, zend_string *key);
 ##### In PHP define:
 ```php
 namespace TEST;
-use CFFI\Struct;
-use CFFI\Union;
-use CFFI\CType\Int64;
-use CFFI\CType\Unsigned;
-use CFFI\CType\Callback;
-use CFFI\CType\Int32;
-use CFFI\CType\Stdcall;
-use CFFI\CType\_;
-class sigset_t extends Int64 implements Unsigned {}
-class uint32_t extends Int32 implements Unsigned {}
+use C\Struct;
+use C\Union;
+use C\Int64;
+use C\Unsigned;
+use C\Callback;
+use C\Int32;
+use C\Stdcall;
+use C\_;
+use C\Type;
+use C\Import;
+#[Unsigned]
+class sigset_t extends Int64 {}
+#[Unsigned]
+class uint32_t extends Int32 {}
 class u extends Union {
-    private uint32_t $type_info;
+    protected uint32_t $type_info;
 }
 
 class zend_refcounted_h extends Struct {
-    private uint32_t $refcount;
-    private u $u;
+    protected uint32_t $refcount;
+    protected u $u;
 }
 class _zend_object extends Struct {
-    private zend_refcounted_h $gc;
-    private uint32_t $handle;
-    private _ & zend_class_entry $ce;
-    private _ & zend_object_handlers $handlers; //use php int value set pointer level, 1 is *, 2 is ** etc
-    private _ & HashTable $properties;
-    #[CArray(1)]
-    private zval $properties_table; // use php array value set array dimensions, like $dimensions of FFI::arrayType
-}
-class callback_function extends Callback {
-    public function __invoke(Int32 $arg):Int32 {
-    }
+    protected zend_refcounted_h $gc;
+    protected uint32_t $handle;
+    protected _ & zend_class_entry $ce;
+    protected _ & zend_object_handlers $handlers; //use php int value set pointer level, 1 is *, 2 is ** etc
+    protected _ & HashTable $properties;
+    protected zval|array $properties_table = [1]; // use php array value set array dimensions, like $dimensions of FFI::arrayType
 }
 
-class PhpCall extends Func { //only same namespace below class type/struct be used
-    private Int32 $globalVar; //extern int globalVar;
-    private Char|_ $globalVar2; //extern char* globalVar;
+#[Type]
+function callback_function (Int32 $arg):Int32 {}
 
-    const DAY = [ 1 => 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];//enum
+#[Import('php.so')]
+abstract class PhpCall { //only same namespace below class type/struct be used
+    protected static Int32 $globalVar; //extern int globalVar;
+    protected static Char|_ $globalVar2; //extern char* globalVar;
+
+    const ENUM = [ 'DAY' => [ 1 => 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']];//enum
 
     #[Stdcall]
-    private function zend_array_dup(HashTable & __ $source):HashTable & __ {
-        return new HashTable;
-    }
-    private function zend_hash_find(HashTable&_ $ht, zend_string & _ $key):zval & __ {
-        return new zval;
-    }
+    abstract protected function zend_array_dup(HashTable & __ $source):HashTable & __ ;
+    abstract protected function zend_hash_find(HashTable&_ $ht, zend_string & _ $key):zval & __;
 }
-$lib = new PhpCall;
-$lib->zend_hash_find();
+
+PhpCall::zend_hash_find();
 ```
