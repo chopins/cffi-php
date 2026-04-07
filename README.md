@@ -1,31 +1,41 @@
 # The repostiory is only show implements rules for php cffi extension
 ## Use PHP class declaring C type, struct,union and function
 
-| C type                  | PHP type                                                    | Note                                   |
-| ----------------------- | ----------------------------------------------------------- | -------------------------------------- |
-| `*`                     | `interface CFFI\CType\_`  or `interface CFFI\CType\Pointer` | 1 level Pointer, use Intersection Type |
-| `**`                    | `interface CFFI\CType\__`                                   | 2 level Pointer                        |
-| `***`                   | `interface CFFI\CType\___`                                  | 3 level Pointer                        |
-| `****`                  | `interface CFFI\CType\____`                                 | 4 level Pointer                        |
-| `void *(*funcName)()`   | `funcName::__invoke():CVoid&_`                              | class __invoke method                  |
-| `void`                  | `class CFFI\CTypeCVoid`                                     |                                        |
-| `typedef int32_t[10] A` | `class A extends Int32 { const SIZE = 10;}`                 | typedef array type                     |
-| `int32_t[10] a`         | `#[CFFI\CType\CArray(10)] Int32 $a`                         | attributes declaration array           |
-| `char`                  | `class CFFI\CType\Char`                                     |                                        |
-| `double`                | `class CFFI\CType\Double64`                                 |                                        |
-| `float`                 | `class CFFI\CType\Float32`                                  |                                        |
-| `long double`           | `class CFFI\CType\LongDouble`                               |                                        |
-| `int8_t`                | `class CFFI\CType\Int8`                                     |                                        |
-| `int16_t`               | `class CFFI\CType\Int16`                                    |                                        |
-| `int32_t`               | `class CFFI\CType\Int32`                                    |                                        |
-| `int64_t`               | `class CFFI\CType\Int64`                                    |                                        |
-| `signed`                | `interface CFFI\CType\Signed`                               | use IntersectionType  declaration      |
-| `unsigned`              | `interface CFFI\CType\unsigned`                             | use IntersectionType  declaration      |
-| `extern`                | `#[CFFI\CType\Extern]`                                      | attributes                             |
-| `__stdcall`             | `#[CFFI\CType\Stdcall]`                                     | attributes                             |
-| `__vectorcall`          | `#[CFFI\CType\Vectorcall]`                                  | attributes                             |
-| `__fastcall`            | `#[CFFI\CType\Fastcall]`                                    | attributes                             |
-
+| C type                        | PHP 声明 type                                        | Note                                     |
+| ----------------------------- | ---------------------------------------------------- | ---------------------------------------- |
+| 类型声明中 `*`                | `C\_`  or `C\Pointer`                                | 1 level Pointer                          |
+| 函数参数 `*`                  | `C\_`  or `&`                                        | 1 level Pointer                          |
+| `**`                          | `C\__`                                               | 2 level Pointer                          |
+| `***`                         | `C\___`                                              | 3 level Pointer                          |
+| `****`                        | `C\____`                                             | 4 level Pointer                          |
+| 任意指针                      | `#[C\_(LevelNum)]`                                   | `LevelNum` 为层数                        |
+| `typedef`                     | `C\Type`                                             | 类型声明继承该类                         |
+| `typedef struct`              | `C\Struct`                                           | 结构声明继承该类                         |
+| `[]`                          | `C\CArray`                                           |                                          |
+| 结构中 `int32_t[10] a`        | `protected Int32 $a =[10];`                          | attributes declaration array             |
+| `typedef int32_t[10] A`       | `#[C\CArray(10)] class A extends Int32 {}`           | typedef array type                       |
+| `typedef int8*(*fn)(int* p)`  | `#[C\Type] function &fn(int &$p):int8 {}`            | 未声明类型时为 `void`                    |
+| `void`                        | `class C\CVoid` or `void`                            |                                          |
+| `char`                        | `class C\Char`                                       | `char*`为`string`                        |
+| `double`                      | `class C\Double`                                     |                                          |
+| `float`                       | `class C\Float32` or`float`                          |                                          |
+| `long double`                 | `class C\LongDouble`                                 |                                          |
+| `int8_t`                      | `class C\Int8`                                       |                                          |
+| `int16_t`                     | `class C\Int16`                                      |                                          |
+| `int32_t`                     | `class C\Int32`                                      |                                          |
+| `int64_t`                     | `class C\Int64`                                      |                                          |
+| `signed`                      | `interface C\Signed`                                 | use IntersectionType  declaration        |
+| `unsigned`                    | `interface C\unsigned`                               | use IntersectionType  declaration        |
+| `extern`                      | `#[C\Extern]`                                        | attributes                               |
+| `__stdcall`                   | `#[C\Stdcall]`                                       | attributes                               |
+| `__vectorcall`                | `#[C\Vectorcall]`                                    | attributes                               |
+| `__fastcall`                  | `#[C\Fastcall]`                                      | attributes                               |
+| 结构中函数`int8（*fn)(int p)` | `abstract protected function fn(int $p):int8`        | attributes                               |
+| C函数导入                     | `abstract class C\Import`                             | 用户类继承                               |
+| C库加载                       | `C\Import::dl($path)`                                 |                                          |
+| 导入的C函数定义               | `abstract protected static function fn(int $p):int8` |                                          |
+| 导入的C变量                   | `protected static int8 $a`                           | 外部按public访问                         |
+| 导入的C enum                  | `const ENUM = []`                                    | 每各枚举列表一个数组，外部可按类常量访问 |
 
 ##### In C define:
 ```c
