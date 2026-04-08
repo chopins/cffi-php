@@ -1,14 +1,58 @@
 # The repostiory is only show implements rules for php cffi extension
 ## Use PHP class declaring C type, struct,union and function
 
+1. 基本C类型与PHP类对应关系
+   1. `void`: `C\CVoid`
+   2. `char`: `C\Char`
+   3. `double`: `C\F64`
+   4. `float`: `C\F32`
+   5. `long double`:`C\FL`
+   6. `int8_t`: `C\I8`
+   7. `int16_t`:`C\I16`
+   8. `int32_t`:`C\I32`
+   9. `int64_t`:`C\I64`
+2. C修饰符等价PHP类或接口
+   1. `typedef`: 抽象类 `C\Type`
+   2. `typedef struct`: 抽象类 `C\Struct`
+   3. `typedef union`: 抽象类 `C\Union`
+   4. `signed`: 接口 `C\Signed`，与基本类型组合
+   5. `unsigned`: 接口 `C\Unsigned`，与基本类型组合
+   6. `extern`: 接口 `C\Extern`,函数注解,或`C\Import`的子类注解
+   7. `__stdcall`: 接口`C\Stdcall`,函数注解,或`C\Import`的子类注解
+   8. `__vectorcall`: 接口`C\Vectorcall`,函数注解,或`C\Import`的子类注解
+   9. `__fastcall`: 接口`C\Fastcall`,函数注解,或`C\Import`的子类注解
+3. 指针
+   1. 使用 `C\P` 接口或子接口与基本C类型组合声明指针类型
+   2. `C\Pointer::LEVEL` 常量值为指针层数
+   3. 定义一个接口继承`C\P`,并定义自定义`LEVEL`以定义任意指针层数
+   4. 函数参数中 PHP 引用符`&` 与返回引用表示`*`指针
+   5. 结构体中，临时指针类型可以组合 PHP的`int`类型然后定义默认整数值来表示指针层数
+   6. 函数中，参数中临时指针类型使用`C\P(LEVEL)`参数注解,`LEVEL`为层数
+   7. 函数中，返回临时指针类型使用`C\P(LEVEL)`函数注解，`LEVEL`为层数
+4. 数组
+   1. 定义数组类型必须实现 `C\CArray` 接口
+   2. 类型类中，必须实现`size():array`方法，返回值为一维数组类型，元素值依次表示C数组各维的长度
+   3. 结构体中，类型组合php `array`类型，表示数组，属性的值依次表示C数组各维的长度
+5. 定义类型，结构，联合体，函数类型
+   1. 类型，继承基本类型
+   2. 结构继承`C\Struct`, `protected` 属性结构体成员,方法为临时类型的回调函数
+   3. 函数类型继承`C\Type`, 原型使用类`__invoke()` 魔术方法
+6. 导出的函数
+   1. 定义类并继承`C\Import`
+   2. 定义类的`DL`常量，值为动态库文件路径
+   3. 定义 `protected static` 修饰的类属性与类方法分别表示C全局变量与函数
+   4. 定义类的`ENUM`常量，其值为数组，数组中每一个元素定义一组C枚举值
+
 | C type                        | PHP 声明 type                                        | Note                                     |
 | ----------------------------- | ---------------------------------------------------- | ---------------------------------------- |
-| 类型声明中 `*`                | `C\_`  or `C\Pointer`                                | 1 level Pointer                          |
-| 函数参数 `*`                  | `C\_`  or `&`                                        | 1 level Pointer                          |
-| `**`                          | `C\__`                                               | 2 level Pointer                          |
-| `***`                         | `C\___`                                              | 3 level Pointer                          |
-| `****`                        | `C\____`                                             | 4 level Pointer                          |
-| 任意指针                      | `#[C\_(LevelNum)]`                                   | `LevelNum` 为层数                        |
+| 类型声明中 `*`                | `C\P`  or `C\Pointer`                                | 1 level Pointer                          |
+| 函数参数 `*`                  | `C\P`  or `&`                                        | 1 level Pointer                          |
+| `**`                          | `C\P2`                                               | 2 level Pointer                          |
+| `***`                         | `C\P3`                                              | 3 level Pointer                          |
+| `****`                        | `C\P4`                                             | 4 level Pointer                          |
+| 任意指针                      | `#[C\_(Level)]`                                   | `Level` 为层数                        |
+| 结构体中 `int32_t ***a`       | `protected Int32\|int $a = 3;`                       | attributes declaration array             |
+| 指针类 ``                     | `const LEVEL`                                        | 常量             |
 | `typedef`                     | `C\Type`                                             | 类型声明继承该类                         |
 | `typedef struct`              | `C\Struct`                                           | 结构声明继承该类                         |
 | `[]`                          | `C\CArray`                                           |                                          |
@@ -97,8 +141,8 @@ class _zend_object extends Struct {
 #[Type]
 function callback_function (Int32 $arg):Int32 {}
 
-#[Import('php.so')]
 abstract class PhpCall { //only same namespace below class type/struct be used
+    const DL = 'php.so';
     protected static Int32 $globalVar; //extern int globalVar;
     protected static Char|_ $globalVar2; //extern char* globalVar;
 
